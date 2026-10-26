@@ -1,6 +1,6 @@
 {
- "name": "Coach Palestra",
- "short_name": "Coach",
+ "name": "Askesis",
+ "short_name": "Askesis",
  "start_url": "./",
  "scope": "./",
  "display": "standalone",
