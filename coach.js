@@ -33,7 +33,8 @@ function supplements() { return ((S.diet && S.diet.integratori) || []).map((x, i
 /* ---------- daily log ---------- */
 const localISO = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return localISO(d); };
-function normDay(v) { v.meals = v.meals || {}; v.custom = v.custom || {}; v.skip = v.skip || {}; v.extra = v.extra || []; v.sup = v.sup || {}; v.water = v.water || 0; return v; }
+function normDay(v) { v.meals = v.meals || {}; v.custom = v.custom || {}; v.skip = v.skip || {}; v.extra = v.extra || []; v.sup = v.sup || {}; v.water = v.water || 0;
+  if (v.creatina != null) { v.sup.s0 = true; delete v.creatina; } if (v.omega) { v.sup.s1 = true; } delete v.omega; return v; }
 function dayLog(iso) { return normDay(S.days[iso] || (S.days[iso] = { meals: {}, water: 0, sup: {}, peso: null, custom: {}, skip: {}, extra: [] })); }
 let dayTimers = {};
 function saveDay(iso) {
@@ -123,7 +124,7 @@ Rispondi SOLO con JSON valido:
 {"nome":"string","tipo":"etichetta" | "stima","per100":{"kcal":0,"p":0,"c":0,"f":0},"porzione_g":null,"note":"una frase"}`;
 const TRAIN_PROMPT = `Converti la scheda di allenamento che ricevi (testo o foto) in JSON. Non inventare esercizi: riporta solo quelli presenti. Se un dato manca usa questi valori: serie 3, ripetizioni 8-12, recupero 90 secondi (150 per squat, stacchi, panche e trazioni), kg null. "giorno" è il giorno della settimana in italiano se indicato, altrimenti null. "corpo_libero" true per esercizi senza carico esterno (trazioni, addominali, piegamenti). "muscolo" è il gruppo principale in italiano (Petto, Dorso, Quadricipiti, Femorali, Glutei, Spalle, Bicipiti, Tricipiti, Polpacci, Addome).
 Rispondi SOLO con JSON valido:
-{"sedute":[{"nome":"string","giorno":"mercoledì" | null,"focus":"string","esercizi":[{"nome":"string","serie":3,"rip_min":8,"rip_max":12,"kg":null,"recupero_s":90,"tecnica":"string","note":"string","corpo_libero":false,"muscolo":"string"}]}]}`;
+{"sedute":[{"nome":"string","giorno":"mercoledì" | null,"focus":"string","esercizi":[{"nome":"string","nome_inglese":"nome comune in inglese, es. Incline Dumbbell Press","serie":3,"rip_min":8,"rip_max":12,"kg":null,"recupero_s":90,"tecnica":"string","note":"string","corpo_libero":false,"muscolo":"string"}]}]}`;
 const DIET_PROMPT = `Converti il piano alimentare che ricevi (testo o foto) in JSON per un'app. Metti ogni pasto in una di queste fasce: colazione, spuntino, pranzo, merenda, cena (se ci sono più spuntini uniscili nella fascia più vicina). Per ogni giorno della settimana scrivi un titolo breve del pasto, l'elenco degli alimenti con le grammature come scritte nel piano e una stima di kcal e macro (tabelle CREA o USDA, pesi a crudo salvo indicazione). Se il piano è uguale tutti i giorni ripetilo per ogni giorno; se un giorno o un pasto non è previsto usa null. Se il piano indica calorie, macro, acqua, integratori o regole, riportali così come sono scritti.
 Rispondi SOLO con JSON valido:
 {"kcal":null,"p":null,"c":null,"f":null,"acqua_l":null,"integratori":[{"nome":"string","dose":"string"}],"regole":["string"],"giorni":{"lunedi":{"colazione":{"titolo":"string","alimenti":["string"],"kcal":0,"p":0,"c":0,"f":0},"spuntino":null,"pranzo":null,"merenda":null,"cena":null},"martedi":{},"mercoledi":{},"giovedi":{},"venerdi":{},"sabato":{},"domenica":{}}}`;
@@ -138,7 +139,7 @@ Rispondi SOLO con JSON valido:
 const DOW_FROM = s => { const k = String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); const i = DOW_KEYS.findIndex(d => k.startsWith(d.slice(0, 3))); return i >= 0 ? i : null; };
 function mapTraining(out) {
   const sed = (out && Array.isArray(out.sedute) ? out.sedute : []).filter(s => s && Array.isArray(s.esercizi) && s.esercizi.length).slice(0, 7);
-  return { sedute: sed.map(s => ({ nome: String(s.nome || ""), dow: DOW_FROM(s.giorno), focus: String(s.focus || ""), esercizi: s.esercizi.slice(0, 14).map(e => { const lo = Math.max(1, Math.round(num(e.rip_min) || 8)), hi = Math.max(lo, Math.round(num(e.rip_max) || lo)); return { nome: String(e.nome || "Esercizio"), serie: Math.min(8, Math.max(1, Math.round(num(e.serie) || 3))), min: lo, max: hi, kg: e.kg == null || e.kg === "" ? null : num(e.kg), recupero: Math.round(num(e.recupero_s) || 90), tecnica: String(e.tecnica || ""), note: String(e.note || ""), corpo_libero: !!e.corpo_libero, muscolo: String(e.muscolo || "Altro") }; }) })) };
+  return { sedute: sed.map(s => ({ nome: String(s.nome || ""), dow: DOW_FROM(s.giorno), focus: String(s.focus || ""), esercizi: s.esercizi.slice(0, 14).map(e => { const lo = Math.max(1, Math.round(num(e.rip_min) || 8)), hi = Math.max(lo, Math.round(num(e.rip_max) || lo)); return { nome: String(e.nome || "Esercizio"), en: String(e.nome_inglese || ""), serie: Math.min(8, Math.max(1, Math.round(num(e.serie) || 3))), min: lo, max: hi, kg: e.kg == null || e.kg === "" ? null : num(e.kg), recupero: Math.round(num(e.recupero_s) || 90), tecnica: String(e.tecnica || ""), note: String(e.note || ""), corpo_libero: !!e.corpo_libero, muscolo: String(e.muscolo || "Altro") }; }) })) };
 }
 function mapDiet(out) {
   const keys = { colazione: "col", spuntino: "spu", pranzo: "pra", merenda: "mer", cena: "cen" }, giorni = {};

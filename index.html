@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000000"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000000"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Coach Palestra"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"><link rel="manifest" href="manifest.webmanifest"><style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif;background:#000}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
 <title>Coach Palestra</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -396,8 +396,8 @@ h2 { font-weight: 700; letter-spacing: -0.01em; }
 <div id="overlay"></div>
 <div id="hello"></div>
 
-<script src="ai.js?v=202610261254"></script>
-<script src="coach.js?v=202610261254"></script>
+<script src="ai.js?v=202610261306"></script>
+<script src="coach.js?v=202610261306"></script>
 <script>
 "use strict";
 /* ---------- the program (from the user's imported or generated plan) ---------- */
@@ -408,7 +408,7 @@ function setTraining(t) {
   P = {}; DAYS = [];
   ((t && t.sedute) || []).forEach((sd, i) => {
     const id = String.fromCharCode(65 + i); DAYS.push(id);
-    P[id] = { day: sd.dow != null ? DOW[sd.dow] : "", dow: sd.dow, nome: sd.nome, focus: sd.focus || sd.nome || "", items: sd.esercizi.map((e, j) => ({ id: id + (j + 1), name: e.nome, sets: e.serie, min: e.min, max: e.max, last: null, kg: e.corpo_libero ? null : e.kg, rest: e.recupero || 90, mus: e.muscolo || "Altro", warm: j === 0, tech: e.tecnica || "", note: e.note || "", unit: e.corpo_libero ? "none" : undefined })) };
+    P[id] = { day: sd.dow != null ? DOW[sd.dow] : "", dow: sd.dow, nome: sd.nome, focus: sd.focus || sd.nome || "", items: sd.esercizi.map((e, j) => ({ id: id + (j + 1), name: e.nome, en: e.en || "", sets: e.serie, min: e.min, max: e.max, last: e.last ?? null, kg: e.corpo_libero ? null : e.kg, rest: e.recupero || 90, mus: e.muscolo || "Altro", warm: e.warm ?? j === 0, tech: e.tecnica || "", note: e.note || "", unit: e.corpo_libero ? "none" : (e.unit || undefined), lib: e.lib || null, demo: e.demo || null })) };
   });
   ALL = DAYS.flatMap(d => P[d].items.map(it => ({ ...it, day: d })));
 }
@@ -429,7 +429,7 @@ const fmt = n => n == null || isNaN(n) ? "–" : Number(n).toLocaleString("it-IT
 const dt = iso => new Date(iso.length === 10 ? iso + "T12:00:00" : iso).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
 const splitName = n => { const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(n); return m ? [m[1], m[2]] : [n, ""]; };
 const short = n => splitName(n)[0];
-const NS = "coach:";
+const NS = (window.APP && APP.ns) || "coach:";
 // each app keeps its own storage: both sites live on the same origin (san7u7.github.io)
 const lsGet = (k, d) => { try { const v = localStorage.getItem(NS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch (e) {} };
@@ -452,6 +452,7 @@ const S = {
   db: null, base: null, assets: null, sample: null, downloads: null, timer: null
 };
 S.state.subs = S.state.subs || {};
+if (window.APP && APP.seed) { if (!S.training) { S.training = APP.seed.training; lsSet("training", S.training); } if (!S.diet) { S.diet = APP.seed.diet; lsSet("diet", S.diet); } }
 if (!["oggi","allenamento","progressi","piano"].includes(S.tab)) S.tab = "oggi";
 
 /* ---------- program logic ---------- */
@@ -483,7 +484,7 @@ function nextDay() {
 function doneToday() { const t = localISO(); return S.sessions.filter(s => localISO(new Date(s.date)) === t).sort((a, b) => a.date < b.date ? 1 : -1)[0] || null; }
 function draft(day) {
   const d = S.drafts[day] || (S.drafts[day] = { started: false, subs: {}, sets: {}, cur: null });
-  for (const it of P[day].items) if (!d.sets[it.id]) {
+  for (const it of P[day].items) if (!d.sets[it.id] || d.sets[it.id].length !== it.sets) {
     const pl = plan(it), ls = pl.b.lastSets;
     d.sets[it.id] = Array.from({ length: it.sets }, (_, i) => ({ kg: it.unit === "none" ? null : pl.kg, reps: pl.up ? it.min : (ls ? (ls[i] ?? ls[0]) : it.min), done: false }));
   }
@@ -524,7 +525,7 @@ function render() {
   const q = $("#q"), qv = q ? q.value : "";
   $("#top").innerHTML = inSession()
     ? `<button class="back" data-act="tab" data-v="oggi" aria-label="Torna a Oggi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>Oggi</button><span class="sync">${esc(S.sync)}</span>`
-    : S.profile ? `<span class="mark">Coach</span><span style="display:flex;align-items:center;gap:6px;min-width:0"><span class="sync">${esc(S.sync)}</span><button class="gear" data-act="sheet" data-v="settings" aria-label="Impostazioni"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></span>` : `<span class="mark">Coach</span><span class="sync">${esc(S.sync)}</span>`;
+    : S.profile ? `<span class="mark">${esc((window.APP && APP.title) || "Coach")}</span><span style="display:flex;align-items:center;gap:6px;min-width:0"><span class="sync">${esc(S.sync)}</span><button class="gear" data-act="tab" data-v="piano" aria-label="Piano e impostazioni"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></span>` : `<span class="mark">${esc((window.APP && APP.title) || "Coach")}</span><span class="sync">${esc(S.sync)}</span>`;
   const v = $("#view");
   if (!S.profile || S.ob) { v.innerHTML = viewOnboarding(); $("#bar").innerHTML = ""; renderSheet(); return; }
   v.innerHTML = S.tab === "oggi" ? viewOggi() : S.tab === "allenamento" ? viewAllenamento() : S.tab === "progressi" ? viewProgress() : viewPiano();
@@ -903,7 +904,7 @@ function viewPiano() {
 
 /* ---------- onboarding ---------- */
 function obInit(step = 0, redo = null) {
-  S.ob = { step, redo, pr: Object.assign({ nome: "", sesso: "m", eta: "", altezza: "", peso: "", obiettivo: "massa", attivita: "media", livello: "intermedio", colore: "lime" }, S.profile || {}), train: null, diet: null, text: "", busy: false, err: null, days: 3 };
+  S.ob = { step, redo, pr: Object.assign({ nome: (window.APP && APP.defaultName) || "", sesso: "m", eta: "", altezza: "", peso: "", obiettivo: "massa", attivita: "media", livello: "intermedio", colore: "lime" }, S.profile || {}), train: null, diet: null, text: "", busy: false, err: null, days: 3 };
 }
 const pickSeg = (k, opts) => `<div class="seg" role="group">${opts.map(([v, l]) => `<button data-act="ob-pick" data-k="${k}" data-v="${v}" aria-pressed="${String(S.ob.pr[k]) === v}">${l}</button>`).join("")}</div>`;
 function viewOnboarding() {
@@ -915,9 +916,9 @@ function viewOnboarding() {
   const noAI = !S.sample ? `<p class="small muted">La lettura con Claude funziona aprendo l'app da claude.ai. Puoi saltare questo passaggio e farlo dopo dalle impostazioni.</p>` : "";
   const fileBtn = (act, label) => `<label class="ghost file-btn" style="display:flex;align-items:center;justify-content:center;text-align:center">${o.busy ? "Sto leggendo il file…" : label}<input type="file" accept="image/*,application/pdf,.pdf,.txt,.md,.csv,text/plain" data-act="${act}" aria-label="${label}" ${o.busy ? "disabled" : ""}></label>`;
   const siteNote = kind => `<p class="small muted">Sei sul sito: senza Claude ${kind === "train" ? "leggo le schede scritte un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra" : "salvo il testo del piano da consultare e calcolo calorie e proteine dal tuo profilo"}. Con l'AI gratuita leggo anche foto e documenti in qualsiasi formato.</p>${aiKeyBox()}`;
-  if (o.step === 0) return `<div class="welcome"><div class="wphoto" style="background-image:url(img/hero.jpg)" role="img" aria-label="Atleta di schiena in posa di doppio bicipite"></div><div class="wtop"><div class="wbar"></div><div class="wbig">Ciao</div><div class="wsub">Il tuo coach</div></div>
+  if (o.step === 0) return `<div class="welcome"><div class="wphoto" style="background-image:url(img/hero.jpg)" role="img" aria-label="Atleta di schiena in posa di doppio bicipite"></div><div class="wtop"><div class="wbar"></div><div class="wbig">Ciao</div><div class="wsub">${esc((window.APP && APP.welcomeSub) || "Il tuo coach")}</div></div>
     <div class="wlist"><div><b>Allenamento</b><span>Seduta guidata, carichi già pronti e progressione automatica.</span></div><div><b>Alimentazione</b><span>Pasti del giorno, calorie e come recuperare quelle mancanti.</span></div><div><b>Progressi</b><span>Carichi, peso e foto su settimana, mese e anno.</span></div></div>
-    <div class="wbot"><p class="lead">Ti faccio qualche domanda, poi carichi la tua scheda e il tuo piano alimentare.</p><button class="primary go" data-act="ob-next">Inizia</button><p class="small faint">${S.site ? "I tuoi dati restano solo su questo telefono." : "I tuoi dati restano nel tuo account e li vedi solo tu."}</p></div></div>`;
+    <div class="wbot"><p class="lead">${esc((window.APP && APP.welcomeLead) || "Ti faccio qualche domanda, poi carichi la tua scheda e il tuo piano alimentare.")}</p><button class="primary go" data-act="ob-next">Inizia</button><p class="small faint">${S.site ? "I tuoi dati restano solo su questo telefono." : "I tuoi dati restano nel tuo account e li vedi solo tu."}</p></div></div>`;
   if (o.step === 1) return `<div class="ob">${dots}<h1>${o.redo ? "Il tuo profilo" : "Parlami di te"}</h1>
     <div class="field"><label for="ob-nome">Come ti chiami?</label><input type="text" id="ob-nome" autocomplete="given-name" value="${esc(pr.nome)}" data-ob="nome"></div>
     <div class="field"><span class="lab">Sesso</span>${pickSeg("sesso", [["m", "Uomo"], ["f", "Donna"]])}</div>
@@ -1031,7 +1032,7 @@ function renderSheet() {
       <div><b>Tecnica</b><p class="muted" style="margin-top:4px">${esc(it.tech)}</p>${sub && sub.cue ? `<p class="muted" style="margin-top:6px">Variante: ${esc(sub.cue)}</p>` : ""}</div>
       ${it.note ? `<div class="alert">${esc(it.note)}</div>` : ""}
       <p class="small faint">Recupero ${mmss(it.rest)} · ${esc(it.mus)}</p>
-      ${S.sample ? `<button class="menu-btn" data-act="alts">Sostituisci esercizio</button>` : ""}
+      ${S.sample || (window.LIB && it.lib && window.LIB[it.lib]) ? `<button class="menu-btn" data-act="alts">Sostituisci esercizio</button>` : ""}
       <button class="ghost" data-act="close">Chiudi</button>`;
   } else if (sh === "swap") {
     const a = activeDay(), d = draft(a), it = P[a].items.find(x => x.id === d.cur.id), L = S.alts[it.name], cur = curSub(it);
@@ -1199,7 +1200,7 @@ document.addEventListener("click", e => {
   const act = b.dataset.act, v = b.dataset.v;
   if (act === "close" && b.classList.contains("scrim") && (e.target !== b || ["food", "peso", "finish"].includes(S.sheet))) return;
   if (act === "close") { if (S.sheet === "chat") S.chatOpen = false; closeSheet(); return; }
-  if (act === "ob-next") { const o = S.ob; if (o.step === 1) { const e2 = readProfile(); if (e2) { o.err = e2; render(); return; } o.err = null; if (o.redo === "profile") { if (!S.diet || S.diet.fonte === "calcolato") o.diet = { ...calcDiet(o.pr), testo: S.diet && S.diet.testo }; return obFinish(); } } o.step++; o.text = ""; window.scrollTo(0, 0); render(); return; }
+  if (act === "ob-next") { const o = S.ob; if (o.step === 1) { const e2 = readProfile(); if (e2) { o.err = e2; render(); return; } o.err = null; if (o.redo === "profile") { if (!S.diet || S.diet.fonte === "calcolato") o.diet = { ...calcDiet(o.pr), testo: S.diet && S.diet.testo }; return obFinish(); } if (window.APP && APP.seed && !o.redo) return obFinish(); } o.step++; o.text = ""; window.scrollTo(0, 0); render(); return; }
   else if (act === "ob-back") { S.ob.step = Math.max(0, S.ob.step - 1); S.ob.err = null; render(); return; }
   else if (act === "ob-cancel") { S.ob = null; syncPlan(); render(); return; }
   else if (act === "ob-pick") { S.ob.pr[b.dataset.k] = v; if (b.dataset.k === "colore") document.documentElement.style.setProperty("--accent", (ACCENTS.find(x => x[0] === v) || ACCENTS[0])[1]); render(); return; }
@@ -1216,6 +1217,7 @@ document.addEventListener("click", e => {
   else if (act === "wipe") { if (!S.confirmWipe) { S.confirmWipe = true; renderSheet(); } else { S.confirmWipe = false; wipeAll(); } return; }
   else if (act === "alts") {
     const a = activeDay(), d = draft(a), it = P[a].items.find(x => x.id === d.cur.id), key = it.name; openSheet("swap");
+    if (window.LIB && it.lib && window.LIB[it.lib]) { S.alts[key] = window.LIB[it.lib]; renderSheet(); return; }
     if (!S.alts[key] || S.alts[key].err) {
       S.alts[key] = { busy: true }; renderSheet();
       S.sample.json(ALT_PROMPT(key), { modelTier: "default" }).then(out => {
@@ -1303,6 +1305,7 @@ function showHello(name, force) {
   h.addEventListener("click", go); setTimeout(go, 2600);
 }
 applyAll();
+try { DAYS.forEach(k => { if (S.drafts[k]) draft(k); }); saveDrafts(); } catch (_) {}
 if (S.profile) showHello(S.profile.nome);
 render();
 (async function connect() {
@@ -1338,6 +1341,8 @@ render();
   render();
 })();
 </script>
-<script src="ux.js?v=202610261254"></script>
+<script src="exdb.js?v=202610261306"></script>
+<script src="ux.js?v=202610261306"></script>
+<script src="hub.js?v=202610261306"></script>
 
 </body></html>
