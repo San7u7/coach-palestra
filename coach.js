@@ -167,7 +167,7 @@ function fmtChat(t) {
 const QUICK = ["Fai il punto della settimana", "Cosa mangio prima e dopo la seduta?", "Oggi sono stanco: come adatto la seduta?", "Pranzo fuori casa: come resto in linea?"];
 function coachContext() {
   const t = localISO(), pr = S.profile || {}, T = planTargets(), wt = weightTrend(), it = intake(t), wb = weekBalance();
-  const sess = S.sessions.slice().sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 6).map(s => `- ${s.date.slice(0, 10)} seduta ${s.day}${s.durata ? `, ${s.durata} min` : ""}${s.fatica != null ? `, fatica ${s.fatica}/10` : ""}${s.note ? `, note: ${s.note}` : ""}: ` + s.items.map(e => `${splitName(e.name)[0]} ${e.sets.map(x => x.kg != null ? `${x.kg}x${x.reps}` : x.reps).join("/")}`).join("; ")).join("\n");
+  const sess = S.sessions.slice().sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 6).map(s => `- ${localISO(new Date(s.date))} seduta ${s.day}${s.durata ? `, ${s.durata} min` : ""}${s.fatica != null ? `, fatica ${s.fatica}/10` : ""}${s.note ? `, note: ${s.note}` : ""}: ` + s.items.map(e => `${splitName(e.name)[0]} ${e.sets.map(x => x.kg != null ? `${x.kg}x${x.reps}` : x.reps).join("/")}`).join("; ")).join("\n");
   const prog = DAYS.map(d => `${d}${P[d].day ? " (" + P[d].day + ")" : ""}: ` + P[d].items.map(it2 => { const pl = plan(it2); return `${splitName(exName(it2))[0]} ${it2.sets}x${it2.min}-${it2.max}${pl.b.kg != null ? ` @${pl.b.kg}kg` : ""}${pl.b.lastSets ? ` ultime ${pl.b.lastSets.join("/")}` : ""}${pl.up ? " PRONTO A SALIRE" : ""}`; }).join("; ")).join("\n");
   const days = Array.from({ length: 7 }, (_, i) => addDays(t, -i)).map(d => { const v = S.days[d]; if (!v) return `- ${d}: non registrato`; const x = intake(d); return `- ${d}: ${Math.round(x.eaten.kcal)} kcal, ${Math.round(x.eaten.p)} g proteine${v.peso ? `, peso ${v.peso} kg` : ""}`; }).join("\n");
   const goal = (GOALS.find(g => g[0] === pr.obiettivo) || GOALS[1])[1];
@@ -197,6 +197,7 @@ async function askCoach(q) {
   q = (q || "").trim(); if (!q || !S.sample || S.coachBusy) return;
   S.chat.msgs.push({ role: "user", content: q }); S.coachBusy = true; S.coachLive = ""; render();
   const hist = S.chat.msgs.slice(-12).map(m => ({ role: m.role, content: m.content }));
+  while (hist.length && hist[0].role !== "user") hist.shift();
   hist[0] = { role: "user", content: COACH_RULES + "\n\n" + coachContext() + "\n\nDOMANDA:\n" + hist[0].content };
   if (hist.length > 1) hist[hist.length - 1] = { role: "user", content: "DATI AGGIORNATI:\n" + coachContext() + "\n\nDOMANDA:\n" + q };
   try {
@@ -217,7 +218,7 @@ async function exportCsv(kind) {
   let rows;
   if (kind === "sedute") {
     rows = [["data", "seduta", "durata_min", "fatica", "esercizio", "serie", "kg", "ripetizioni", "note"]];
-    for (const s of S.sessions.slice().sort((a, b) => a.date < b.date ? -1 : 1)) for (const e of s.items) e.sets.forEach((x, i) => rows.push([s.date.slice(0, 10), s.day, s.durata ?? "", s.fatica ?? "", e.name, i + 1, x.kg, x.reps, i === 0 ? (s.note || "") : ""]));
+    for (const s of S.sessions.slice().sort((a, b) => a.date < b.date ? -1 : 1)) for (const e of s.items) e.sets.forEach((x, i) => rows.push([localISO(new Date(s.date)), s.day, s.durata ?? "", s.fatica ?? "", e.name, i + 1, x.kg, x.reps, i === 0 ? (s.note || "") : ""]));
   } else {
     rows = [["data", "peso_kg", "pasti_registrati", "kcal_stimate", "proteine_g", "acqua_l"]];
     for (const [d, v] of Object.entries(S.days).sort()) { normDay(v); const it = intake(d); rows.push([d, v.peso ? +v.peso : "", MEALS.filter(([k]) => ["plan", "custom"].includes(mealState(v, k))).length + v.extra.length, Math.round(it.eaten.kcal), Math.round(it.eaten.p), v.water * 0.25]); }
@@ -261,7 +262,7 @@ function parseTrainingText(t) {
       if (!cur) { cur = { nome: "Seduta " + String.fromCharCode(65 + sedute.length), dow: null, focus: "", esercizi: [] }; sedute.push(cur); }
       const rest = m[5] || "", kg = /(\d+(?:[.,]\d+)?)\s*kg/i.exec(rest), rec = /(\d+)\s*(?:"|″|s\b|sec)/i.exec(rest), lo = +m[3], hi = Math.max(lo, +(m[4] || m[3]));
       cur.esercizi.push({ nome: m[1].trim().replace(/[\s:–-]+$/, ""), serie: Math.min(8, +m[2]), min: lo, max: hi, kg: kg ? num(kg[1]) : null, recupero: rec ? +rec[1] : 90, tecnica: "", note: "", corpo_libero: /trazion|pull.?up|addominal|crunch|plank|piegament|push.?up|dip/i.test(m[1]), muscolo: "Altro" });
-    } else if (l.length <= 60) { cur = { nome: l.replace(/[:\-–]+$/, "").trim(), dow: dowIn(l), focus: "", esercizi: [] }; sedute.push(cur); }
+    } else if (l.length <= 60 && (/\b(seduta|giorno|allenamento|workout|day|scheda|push|pull|legs|gambe|upper|lower|full\s*body)\b/i.test(l) || /^[A-F]\s*[:\-–)]?\s*$/i.test(l) || /^(seduta|giorno)?\s*[A-F1-7]\b/i.test(l) || dowIn(l) != null)) { cur = { nome: l.replace(/[:\-–]+$/, "").trim(), dow: dowIn(l), focus: "", esercizi: [] }; sedute.push(cur); }
   }
   return { sedute: sedute.filter(s => s.esercizi.length).slice(0, 7) };
 }
