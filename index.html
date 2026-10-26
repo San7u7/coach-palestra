@@ -814,7 +814,8 @@ function viewPiano() {
   } else if (S.pianosub === "menu" && !hasMealPlan()) {
     body = `<div class="block"><div class="kv kv4"><div><div class="k">Kcal</div><div class="v">${fmt(PLAN.kcal)}</div></div><div><div class="k">Proteine</div><div class="v">${PLAN.pro} g</div></div><div><div class="k">Carboidrati</div><div class="v">${PLAN.cho} g</div></div><div><div class="k">Grassi</div><div class="v">${PLAN.fat} g</div></div></div>
       <p class="small muted">Obiettivo calcolato dall'app con la formula Mifflin-St Jeor sul tuo profilo: è una stima. Per un piano su misura rivolgiti a un dietista o a un nutrizionista.</p>${(S.diet.notes || []).map(n => `<div class="alert">${esc(n)}</div>`).join("")}</div>
-      <div class="block"><div class="empty"><h2>Hai un piano alimentare?</h2><p class="muted">Caricalo come testo o foto: vedrai i pasti di ogni giorno e potrai segnarli con un tocco.</p><button class="primary" data-act="redo" data-v="3">Carica il piano</button></div></div>`;
+      ${S.diet && S.diet.testo ? `<div class="block"><div class="card"><h2>Il tuo piano</h2><p class="muted" style="white-space:pre-wrap">${esc(S.diet.testo)}</p></div></div>` : ""}
+      <div class="block"><div class="empty"><h2>${S.diet && S.diet.testo ? "Vuoi i pasti da spuntare?" : "Hai un piano alimentare?"}</h2><p class="muted">Caricalo come testo o foto: vedrai i pasti di ogni giorno e potrai segnarli con un tocco.</p><button class="primary" data-act="redo" data-v="3">Carica il piano</button></div></div>`;
   } else if (S.pianosub === "menu") {
     const dow = S.dietDow ?? new Date().getDay();
     body = `<div class="block"><div class="seg scroll" role="group" aria-label="Giorno">${[1, 2, 3, 4, 5, 6, 0].map(d => `<button data-act="ddow" data-v="${d}" aria-pressed="${d === dow}">${DOW[d].slice(0, 3)}</button>`).join("")}</div></div>
@@ -844,7 +845,8 @@ function viewOnboarding() {
   const back = o.redo ? `<button class="link small" data-act="ob-cancel">Annulla</button>` : o.step > 0 ? `<button class="link small" data-act="ob-back">Indietro</button>` : "";
   const err = o.err ? `<div class="alert">${esc(o.err)}</div>` : "";
   const noAI = !S.sample ? `<p class="small muted">La lettura con Claude funziona aprendo l'app da claude.ai. Puoi saltare questo passaggio e farlo dopo dalle impostazioni.</p>` : "";
-  const fileBtn = (act, label) => `<label class="ghost file-btn" style="display:flex;align-items:center;justify-content:center;text-align:center">${label}<input type="file" accept="image/*" data-act="${act}" aria-label="${label}"></label>`;
+  const fileBtn = (act, label) => `<label class="ghost file-btn" style="display:flex;align-items:center;justify-content:center;text-align:center">${o.busy ? "Sto leggendo il file…" : label}<input type="file" accept="image/*,application/pdf,.pdf,.txt,.md,.csv,text/plain" data-act="${act}" aria-label="${label}" ${o.busy ? "disabled" : ""}></label>`;
+  const siteNote = kind => `<p class="small muted">Sei sul sito: senza Claude ${kind === "train" ? "leggo le schede scritte un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra" : "salvo il testo del piano da consultare e calcolo calorie e proteine dal tuo profilo"}. Nell'app su claude.ai Claude legge anche foto e documenti in qualsiasi formato.</p>`;
   if (o.step === 0) return `<div class="welcome"><div class="wtop"><div class="wbar"></div><div class="wbig">Ciao</div><div class="wsub">Il tuo coach</div></div>
     <div class="wlist"><div><b>Allenamento</b><span>Seduta guidata, carichi già pronti e progressione automatica.</span></div><div><b>Alimentazione</b><span>Pasti del giorno, calorie e come recuperare quelle mancanti.</span></div><div><b>Progressi</b><span>Carichi, peso e foto su settimana, mese e anno.</span></div></div>
     <div class="wbot"><p class="lead">Ti faccio qualche domanda, poi carichi la tua scheda e il tuo piano alimentare.</p><button class="primary" data-act="ob-next">Inizia</button><p class="small faint">I tuoi dati restano nel tuo account e li vedi solo tu.</p></div></div>`;
@@ -864,10 +866,10 @@ function viewOnboarding() {
     return `<div class="ob">${dots}<h1>La tua scheda di allenamento</h1>
       ${t ? `<div class="card"><h2>${t.sedute.length} ${t.sedute.length === 1 ? "seduta" : "sedute"}</h2>${t.sedute.map((sd, i) => `<div><b>${String.fromCharCode(65 + i)} · ${esc(sd.nome || sd.focus || "Seduta")}</b>${sd.dow != null ? ` <span class="small faint">${DOW[sd.dow]}</span>` : ""}<p class="small muted">${sd.esercizi.map(e => `${esc(e.nome)} ${e.serie}×${e.min}${e.max !== e.min ? "–" + e.max : ""}`).join(" · ")}</p></div>`).join("")}</div>
         <button class="primary" data-act="ob-use" data-v="train">Usa questa scheda</button><button class="ghost" data-act="ob-reset" data-v="train">Rifai</button>`
-      : `<p class="lead">Incolla il testo della scheda o fotografala: Claude la trasforma in sedute con serie, ripetizioni e carichi.</p>
+      : `<p class="lead">Incolla il testo della scheda, oppure carica una foto o un PDF: diventa una lista di sedute con serie, ripetizioni e carichi.</p>
         <textarea id="ob-text" rows="5" data-ob="text" placeholder="Es. Seduta A: panca piana 3×6-8 60 kg, lat machine 3×10-12…">${esc(o.text)}</textarea>
-        ${S.sample ? `<button class="primary" data-act="ob-train-text" ${o.busy ? "disabled" : ""}>${o.busy === "train" ? "Sto leggendo la scheda…" : "Converti il testo"}</button>${fileBtn("ob-train-photo", "Fotografa la scheda")}
-        <div class="card"><h2>Non hai una scheda?</h2><p class="small muted">Claude ne crea una di base sul tuo profilo. Quante sedute a settimana?</p><div class="seg" role="group">${[2, 3, 4, 5].map(n => `<button data-act="ob-days" data-v="${n}" aria-pressed="${o.days === n}">${n}</button>`).join("")}</div><button class="ghost" data-act="ob-train-gen" ${o.busy ? "disabled" : ""}>Crea una scheda di base</button></div>` : noAI}
+        <button class="primary" data-act="ob-train-text" ${o.busy ? "disabled" : ""}>${o.busy === "train" ? "Sto leggendo la scheda…" : "Leggi la scheda"}</button>${fileBtn("ob-train-photo", S.sample ? "Carica foto o PDF della scheda" : "Carica PDF o file di testo")}
+        ${S.sample ? `<div class="card"><h2>Non hai una scheda?</h2><p class="small muted">Claude ne crea una di base sul tuo profilo. Quante sedute a settimana?</p><div class="seg" role="group">${[2, 3, 4, 5].map(n => `<button data-act="ob-days" data-v="${n}" aria-pressed="${o.days === n}">${n}</button>`).join("")}</div><button class="ghost" data-act="ob-train-gen" ${o.busy ? "disabled" : ""}>Crea una scheda di base</button></div>` : siteNote("train")}
         ${err}<button class="link small" data-act="ob-skip">${o.redo ? "Annulla" : "Salta per ora"}</button>`}
       ${o.redo || !t ? (o.redo ? "" : back) : back}</div>`;
   }
@@ -876,12 +878,12 @@ function viewOnboarding() {
     const prev = !d ? "" : d.fonte === "piano"
       ? `<div class="card"><h2>Piano letto</h2><p class="muted">${Object.keys(d.giorni).length} giorni con pasti, circa ${fmt(d.kcal)} kcal e ${fmt(d.p)} g di proteine al giorno.</p>${d.integratori.length ? `<p class="small muted">Integratori: ${esc(d.integratori.map(x => x.nome).join(", "))}</p>` : ""}${(() => { const g = d.giorni[1] || Object.values(d.giorni)[0]; return g ? `<ul class="plain muted small">${MEALS.filter(([k]) => g[k]).map(([k, l]) => `<li>${l}: ${esc(g[k].t)} · ${fmt(g[k].kcal)} kcal</li>`).join("")}</ul>` : ""; })()}</div>`
       : `<div class="card"><h2>Il tuo obiettivo stimato</h2><div class="kv kv4"><div><div class="k">Kcal</div><div class="v">${fmt(d.kcal)}</div></div><div><div class="k">Proteine</div><div class="v">${d.p} g</div></div><div><div class="k">Carbo</div><div class="v">${d.c} g</div></div><div><div class="k">Grassi</div><div class="v">${d.f} g</div></div></div>
-        <p class="small muted">Formula Mifflin-St Jeor sul tuo profilo e sul livello di attività: è una stima di partenza. Per un piano su misura rivolgiti a un dietista o a un nutrizionista.</p>${(d.notes || []).map(n => `<div class="alert">${esc(n)}</div>`).join("")}</div>`;
+        <p class="small muted">Formula Mifflin-St Jeor sul tuo profilo e sul livello di attività: è una stima di partenza. Per un piano su misura rivolgiti a un dietista o a un nutrizionista.</p>${d.testo ? `<p class="small">Il testo del tuo piano è salvato: lo trovi in Piano → Menù.</p>` : ""}${(d.notes || []).map(n => `<div class="alert">${esc(n)}</div>`).join("")}</div>`;
     return `<div class="ob">${dots}<h1>Il tuo piano alimentare</h1>
       ${d ? prev + `<button class="primary" data-act="ob-use" data-v="diet">${d.fonte === "piano" ? "Usa questo piano" : "Va bene, usa questo obiettivo"}</button><button class="ghost" data-act="ob-reset" data-v="diet">Rifai</button>`
-      : `<p class="lead">Se segui un piano di un dietista o di un nutrizionista, incollalo o fotografalo: vedrai i pasti di ogni giorno con le calorie.</p>
+      : `<p class="lead">Se segui un piano di un dietista o di un nutrizionista, incollalo oppure carica una foto o un PDF.</p>
         <textarea id="ob-text" rows="5" data-ob="text" placeholder="Es. Colazione: 60 g fiocchi d'avena, 200 g yogurt greco…">${esc(o.text)}</textarea>
-        ${S.sample ? `<button class="primary" data-act="ob-diet-text" ${o.busy ? "disabled" : ""}>${o.busy === "diet" ? "Sto leggendo il piano…" : "Converti il testo"}</button>${fileBtn("ob-diet-photo", "Fotografa il piano")}` : noAI}
+        <button class="primary" data-act="ob-diet-text" ${o.busy ? "disabled" : ""}>${o.busy === "diet" ? "Sto leggendo il piano…" : S.sample ? "Leggi il piano" : "Salva il piano"}</button>${fileBtn("ob-diet-photo", S.sample ? "Carica foto o PDF del piano" : "Carica PDF o file di testo")}${S.sample ? "" : siteNote("diet")}
         <div class="card"><h2>Non hai un piano?</h2><p class="small muted">L'app calcola calorie e proteine dal tuo profilo e ti aiuta a contare quello che mangi.</p><button class="ghost" data-act="ob-diet-calc">Calcola il mio obiettivo</button></div>${err}`}
       ${back}</div>`;
   }
@@ -909,14 +911,27 @@ function applyAll() { setTraining(S.training); syncPlan(); }
 async function obClaude(kind, src) {
   const o = S.ob; o.busy = kind; o.err = null; render();
   try {
-    let prompt; const opts = { modelTier: "complex" };
-    if (src.gen) prompt = genTrainPrompt(o.pr, o.days);
-    else { prompt = (kind === "train" ? TRAIN_PROMPT : DIET_PROMPT) + (src.text ? "\n\nTESTO:\n" + src.text : ""); if (src.file) opts.images = [await shrink(src.file)]; }
-    const out = await S.sample.json(prompt, opts);
-    if (kind === "train") { const t = mapTraining(out); if (!t.sedute.length) throw new Error("vuoto"); o.train = t; }
-    else { const d = mapDiet(out); if (!Object.keys(d.giorni).length) throw new Error("vuoto"); if (!d.kcal) { const c = computeTargets(o.pr); d.kcal = c.kcal; d.p = d.p || c.p; } o.diet = d; }
+    let text = src.text || "", images = [];
+    if (src.file) { const d = await readDoc(src.file); if (d.text) text = (text ? text + "\n\n" : "") + d.text; images = d.images; }
+    if (!S.sample && !src.gen) {
+      if (kind === "train") {
+        const t = parseTrainingText(text);
+        if (!t.sedute.length) throw { local: images.length ? "Sul sito non posso leggere foto o PDF scansionati: incolla il testo della scheda, oppure usa l'app su claude.ai." : "Non ho trovato esercizi. Scrivi un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra." };
+        o.train = t;
+      } else {
+        if (!text.trim()) throw { local: "Sul sito non posso leggere foto o PDF scansionati: incolla il testo del piano, oppure usa l'app su claude.ai." };
+        o.diet = { ...calcDiet(o.pr), testo: text.slice(0, 20000) };
+      }
+    } else {
+      let prompt; const opts = { modelTier: "complex" };
+      if (src.gen) prompt = genTrainPrompt(o.pr, o.days);
+      else { prompt = (kind === "train" ? TRAIN_PROMPT : DIET_PROMPT) + (text ? "\n\nTESTO:\n" + text : ""); if (images.length) opts.images = images; }
+      const out = await S.sample.json(prompt, opts);
+      if (kind === "train") { const t = mapTraining(out); if (!t.sedute.length) throw new Error("vuoto"); o.train = t; }
+      else { const d = mapDiet(out); if (!Object.keys(d.giorni).length) throw new Error("vuoto"); if (!d.kcal) { const c = computeTargets(o.pr); d.kcal = c.kcal; d.p = d.p || c.p; } o.diet = d; }
+    }
   } catch (e) {
-    o.err = e && e.code === "not_granted" ? "Serve il permesso per far leggere i documenti a Claude: riapri l'app e consenti l'accesso." : e && e.code === "rate_limited" ? "Troppe richieste ravvicinate: riprova tra qualche minuto." : kind === "train" ? "Non sono riuscito a leggere la scheda. Prova con il testo incollato o con una foto dritta e ben illuminata." : "Non sono riuscito a leggere il piano. Prova con il testo incollato o con una foto dritta e ben illuminata.";
+    o.err = e && e.local ? e.local : e && e.message === "formato" ? "Formato non supportato: usa una foto, un PDF o un file di testo. Un documento Word salvalo prima in PDF." : e && e.message === "script" ? "Non riesco a caricare il lettore dei PDF: controlla la connessione e riprova." : e && e.code === "not_granted" ? "Serve il permesso per far leggere i documenti a Claude: riapri l'app e consenti l'accesso." : e && e.code === "rate_limited" ? "Troppe richieste ravvicinate: riprova tra qualche minuto." : kind === "train" ? "Non sono riuscito a leggere la scheda. Prova con il testo incollato o con una foto dritta e ben illuminata." : "Non sono riuscito a leggere il piano. Prova con il testo incollato o con una foto dritta e ben illuminata.";
   }
   o.busy = false; render();
 }

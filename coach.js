@@ -225,3 +225,43 @@ async function exportCsv(kind) {
   try { await S.downloads.save({ filename: `${kind === "sedute" ? "storico-allenamenti" : "diario-peso-dieta"}-${localISO()}.csv`, data: "﻿" + rows.map(r => r.map(csvCell).join(";")).join("\n") }); }
   catch (e) { if (e && e.code !== "declined") toast("Esportazione non disponibile qui"); }
 }
+
+/* ---------- documents and offline reading ---------- */
+const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+let pdfReady = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("script")); document.head.appendChild(s); }); }
+function loadPdf() {
+  // the worker script runs on the main thread ("fake worker"), so no cross-origin Worker is needed
+  return pdfReady || (pdfReady = loadScript(PDFJS + "pdf.worker.min.js").then(() => loadScript(PDFJS + "pdf.min.js")).then(() => window.pdfjsLib));
+}
+async function readDoc(file, maxImages = 4) {
+  const name = (file.name || "").toLowerCase(), type = file.type || "";
+  if (type.startsWith("text/") || /\.(txt|md|csv)$/.test(name)) return { text: (await file.text()).slice(0, 30000), images: [] };
+  if (type === "application/pdf" || name.endsWith(".pdf")) {
+    const lib = await loadPdf(), pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    let text = "";
+    for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) { const pg = await pdf.getPage(i), tc = await pg.getTextContent();
+      let line = "", lastY = null; for (const it of tc.items) { const y = it.transform[5]; if (lastY != null && Math.abs(y - lastY) > 3) { text += line.trim() + "\n"; line = ""; } line += it.str + " "; lastY = y; } text += line.trim() + "\n\n"; }
+    if (text.replace(/\s/g, "").length > 30) return { text: text.slice(0, 30000), images: [] };
+    const images = [];
+    for (let i = 1; i <= Math.min(pdf.numPages, maxImages); i++) { const pg = await pdf.getPage(i), vp = pg.getViewport({ scale: 1.6 }), c = document.createElement("canvas");
+      c.width = vp.width; c.height = vp.height; await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise; images.push(await new Promise(r => c.toBlob(r, "image/jpeg", 0.85))); }
+    return { text: "", images };
+  }
+  if (type.startsWith("image/")) return { text: "", images: [await shrink(file)] };
+  throw new Error("formato");
+}
+const dowIn = s => { const k = String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); const i = DOW_KEYS.findIndex(d => k.includes(d.slice(0, 5)) || new RegExp("\\b" + d.slice(0, 3) + "\\b").test(k)); return i >= 0 ? i : null; };
+// Offline reader for lines like "Panca piana 3x8-10 60 kg" grouped under session titles.
+function parseTrainingText(t) {
+  const sedute = []; let cur = null;
+  const ex = /^[-•*\d.)\s]*(.+?)[\s:,–-]+(\d{1,2})\s*(?:x|×|serie\s*(?:da|x)?)\s*(\d{1,2})(?:\s*(?:-|–|\/|a)\s*(\d{1,2}))?\s*(?:rip\w*)?(.*)$/i;
+  for (const raw of String(t).split(/\n/)) { const l = raw.trim(); if (!l) continue; const m = ex.exec(l);
+    if (m && /[a-zà-ú]{2}/i.test(m[1])) {
+      if (!cur) { cur = { nome: "Seduta " + String.fromCharCode(65 + sedute.length), dow: null, focus: "", esercizi: [] }; sedute.push(cur); }
+      const rest = m[5] || "", kg = /(\d+(?:[.,]\d+)?)\s*kg/i.exec(rest), rec = /(\d+)\s*(?:"|″|s\b|sec)/i.exec(rest), lo = +m[3], hi = Math.max(lo, +(m[4] || m[3]));
+      cur.esercizi.push({ nome: m[1].trim().replace(/[\s:–-]+$/, ""), serie: Math.min(8, +m[2]), min: lo, max: hi, kg: kg ? num(kg[1]) : null, recupero: rec ? +rec[1] : 90, tecnica: "", note: "", corpo_libero: /trazion|pull.?up|addominal|crunch|plank|piegament|push.?up|dip/i.test(m[1]), muscolo: "Altro" });
+    } else if (l.length <= 60) { cur = { nome: l.replace(/[:\-–]+$/, "").trim(), dow: dowIn(l), focus: "", esercizi: [] }; sedute.push(cur); }
+  }
+  return { sedute: sedute.filter(s => s.esercizi.length).slice(0, 7) };
+}

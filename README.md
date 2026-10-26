@@ -12,7 +12,7 @@ App web per allenamento e alimentazione, pensata per l'iPhone. Ognuno inserisce 
 
 ## Modalità
 - **Dentro claude.ai** (come artifact): salvataggio nell'account, coach, lettura di schede, piani ed etichette da testo o foto, stime delle calorie e sostituzioni degli esercizi con Claude.
-- **Su GitHub Pages**: modalità base. I dati restano solo nel browser del dispositivo e le funzioni basate su Claude non sono disponibili; l'obiettivo di calorie si calcola con la formula Mifflin-St Jeor.
+- **Su GitHub Pages**: modalità base. I dati restano solo nel browser del dispositivo e le funzioni basate su Claude non sono disponibili. La scheda si legge da testo o PDF scritti un esercizio per riga (es. «Panca piana 3x8-10 60 kg», con il nome della seduta sopra); il piano alimentare si salva come testo da consultare e l'obiettivo di calorie si calcola con la formula Mifflin-St Jeor.
 
 ## Avvertenze
 Le calorie sono stime. L'app non sostituisce medico, dietista o allenatore.
