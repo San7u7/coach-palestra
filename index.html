@@ -336,6 +336,7 @@ label.ghost.file-btn { display: flex; align-items: center; justify-content: cent
 <div id="overlay"></div>
 <div id="hello"></div>
 
+<script src="ai.js"></script>
 <script src="coach.js"></script>
 <script>
 "use strict";
@@ -758,11 +759,11 @@ function viewPhotos() {
   return `<div class="block">
       ${S.assets ? `<div class="posesel seg" role="group" aria-label="Posa">${["frontale","laterale","posteriore"].map(p => `<button data-act="pose" data-v="${p}" aria-pressed="${(S.pose || "frontale") === p}">${p[0].toUpperCase() + p.slice(1)}</button>`).join("")}</div>
         <button class="primary file-btn">Aggiungi foto ${S.pose || "frontale"}<input type="file" accept="image/*" data-act="upload" aria-label="Scegli una foto"></button>`
-        : `<div class="alert">Per salvare le foto apri la scheda da claude.ai con l'accesso: restano nello spazio privato di questa app.</div>`}
+        : `<div class="alert">Il salvataggio delle foto non è disponibile in questo browser.</div>`}
       ${grid}
       ${ph.length ? `<p class="small faint">Tocca una foto per sceglierla, due per confrontarle nella stessa posa.</p>` : ""}
       ${chosen.length === 2 ? `<div class="cmp">${chosen.map((p, i) => `<figure><img src="${esc(p.url)}" alt="Foto ${i ? "dopo" : "prima"}"><figcaption>${i ? "Dopo" : "Prima"} · ${dt(p.date)}</figcaption></figure>`).join("")}</div>` : ""}
-      ${chosen.length ? `<button class="primary" data-act="analyze" ${S.busy || !S.sample ? "disabled" : ""}>${S.busy ? "Valutazione in corso…" : chosen.length === 2 ? "Valuta i progressi" : "Valuta questa foto"}</button>` : ""}
+      ${chosen.length && !S.sample ? `<p class="small muted">Per la valutazione delle foto attiva l'AI gratuita nelle impostazioni.</p>` : ""}${chosen.length ? `<button class="primary" data-act="analyze" ${S.busy || !S.sample ? "disabled" : ""}>${S.busy ? "Valutazione in corso…" : chosen.length === 2 ? "Valuta i progressi" : "Valuta questa foto"}</button>` : ""}
       ${res}</div>
     <div class="block"><div class="card"><h2>Come scattare foto confrontabili</h2><ul class="plain muted"><li>Al mattino, a digiuno, prima della seduta.</li><li>Stesso posto e stessa luce frontale, mai dall'alto.</li><li>Telefono all'altezza dell'ombelico, a 2–3 m, timer, niente zoom.</li><li>Tre pose rilassate, stessi pantaloncini.</li><li>Ogni 4 settimane.</li></ul></div></div>`;
 }
@@ -777,7 +778,7 @@ async function upload(file) {
     toast("Caricamento…");
     const blob = await shrink(file), r = await S.assets.upload(blob, { type: "image/jpeg" });
     const p = { id: "p" + Date.now(), kind: "photo", date: new Date().toISOString(), pose: S.pose || "frontale", assetId: r.id, url: r.url, analysis: null };
-    S.photos.push(p); S.blobs[p.id] = blob; if (S.db) await S.db.doc(S.base + "/" + p.id).set(p);
+    S.photos.push(p); S.blobs[p.id] = blob; if (S.db) await S.db.doc(S.base + "/" + p.id).set(p); else saveLocalPhotos();
     S.sel = [p.id]; S.analysis = null; render(); toast("Foto salvata");
   } catch (e) { toast("Caricamento non riuscito: riprova con una foto più piccola"); }
 }
@@ -790,7 +791,7 @@ async function analyze() {
     const pr = S.profile || {}, input = PROMPT + `\n\nPROFILO: ${pr.sesso === "f" ? "donna" : "uomo"}, ${pr.eta} anni, obiettivo ${pr.obiettivo}.` + (chosen.length === 2 ? `\n\nFOTO A: ${dt(chosen[0].date)}, posa ${chosen[0].pose}. FOTO B: ${dt(chosen[1].date)}, posa ${chosen[1].pose}.` : `\n\nUna sola foto: ${dt(chosen[0].date)}, posa ${chosen[0].pose}.`);
     const out = await S.sample.json(input, { images: blobs, modelTier: "complex" });
     S.analysis = out; const tg = chosen[chosen.length - 1]; tg.analysis = out;
-    if (S.db) S.db.doc(S.base + "/" + tg.id).update({ analysis: out }).catch(() => {});
+    if (S.db) S.db.doc(S.base + "/" + tg.id).update({ analysis: out }).catch(() => {}); else saveLocalPhotos();
   } catch (e) {
     S.analysis = { error: e && e.code === "not_granted" ? "Serve il permesso per far valutare le foto a Claude: riapri la scheda e consenti l'accesso." : e && e.code === "rate_limited" ? "Troppe richieste ravvicinate: riprova tra qualche minuto." : "La valutazione non è riuscita. Riprova con una foto più luminosa." };
   }
@@ -846,10 +847,10 @@ function viewOnboarding() {
   const err = o.err ? `<div class="alert">${esc(o.err)}</div>` : "";
   const noAI = !S.sample ? `<p class="small muted">La lettura con Claude funziona aprendo l'app da claude.ai. Puoi saltare questo passaggio e farlo dopo dalle impostazioni.</p>` : "";
   const fileBtn = (act, label) => `<label class="ghost file-btn" style="display:flex;align-items:center;justify-content:center;text-align:center">${o.busy ? "Sto leggendo il file…" : label}<input type="file" accept="image/*,application/pdf,.pdf,.txt,.md,.csv,text/plain" data-act="${act}" aria-label="${label}" ${o.busy ? "disabled" : ""}></label>`;
-  const siteNote = kind => `<p class="small muted">Sei sul sito: senza Claude ${kind === "train" ? "leggo le schede scritte un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra" : "salvo il testo del piano da consultare e calcolo calorie e proteine dal tuo profilo"}. Nell'app su claude.ai Claude legge anche foto e documenti in qualsiasi formato.</p>`;
+  const siteNote = kind => `<p class="small muted">Sei sul sito: senza Claude ${kind === "train" ? "leggo le schede scritte un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra" : "salvo il testo del piano da consultare e calcolo calorie e proteine dal tuo profilo"}. Con l'AI gratuita leggo anche foto e documenti in qualsiasi formato.</p>${aiKeyBox()}`;
   if (o.step === 0) return `<div class="welcome"><div class="wtop"><div class="wbar"></div><div class="wbig">Ciao</div><div class="wsub">Il tuo coach</div></div>
     <div class="wlist"><div><b>Allenamento</b><span>Seduta guidata, carichi già pronti e progressione automatica.</span></div><div><b>Alimentazione</b><span>Pasti del giorno, calorie e come recuperare quelle mancanti.</span></div><div><b>Progressi</b><span>Carichi, peso e foto su settimana, mese e anno.</span></div></div>
-    <div class="wbot"><p class="lead">Ti faccio qualche domanda, poi carichi la tua scheda e il tuo piano alimentare.</p><button class="primary" data-act="ob-next">Inizia</button><p class="small faint">I tuoi dati restano nel tuo account e li vedi solo tu.</p></div></div>`;
+    <div class="wbot"><p class="lead">Ti faccio qualche domanda, poi carichi la tua scheda e il tuo piano alimentare.</p><button class="primary" data-act="ob-next">Inizia</button><p class="small faint">${S.site ? "I tuoi dati restano solo su questo telefono." : "I tuoi dati restano nel tuo account e li vedi solo tu."}</p></div></div>`;
   if (o.step === 1) return `<div class="ob">${dots}<h1>${o.redo ? "Il tuo profilo" : "Parlami di te"}</h1>
     <div class="field"><label for="ob-nome">Come ti chiami?</label><input type="text" id="ob-nome" autocomplete="given-name" value="${esc(pr.nome)}" data-ob="nome"></div>
     <div class="field"><span class="lab">Sesso</span>${pickSeg("sesso", [["m", "Uomo"], ["f", "Donna"]])}</div>
@@ -916,10 +917,10 @@ async function obClaude(kind, src) {
     if (!S.sample && !src.gen) {
       if (kind === "train") {
         const t = parseTrainingText(text);
-        if (!t.sedute.length) throw { local: images.length ? "Sul sito non posso leggere foto o PDF scansionati: incolla il testo della scheda, oppure usa l'app su claude.ai." : "Non ho trovato esercizi. Scrivi un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra." };
+        if (!t.sedute.length) throw { local: images.length ? "Sul sito non posso leggere foto o PDF scansionati: incolla il testo della scheda, oppure attiva l'AI gratuita qui sotto." : "Non ho trovato esercizi. Scrivi un esercizio per riga, per esempio «Panca piana 3x8-10 60 kg», con il nome della seduta sopra." };
         o.train = t;
       } else {
-        if (!text.trim()) throw { local: "Sul sito non posso leggere foto o PDF scansionati: incolla il testo del piano, oppure usa l'app su claude.ai." };
+        if (!text.trim()) throw { local: "Sul sito non posso leggere foto o PDF scansionati: incolla il testo del piano, oppure attiva l'AI gratuita qui sotto." };
         o.diet = { ...calcDiet(o.pr), testo: text.slice(0, 20000) };
       }
     } else {
@@ -996,7 +997,7 @@ function renderSheet() {
       ${lib.length ? `<div><p class="small muted" style="margin-bottom:8px">I miei alimenti: tocca per aggiungere</p><div class="chips">${lib.map(x => `<button class="ghost" data-act="fadd" data-v="${x.id}">${esc(x.nome)}</button>`).join("")}</div></div>` : ""}
       ${S.sample ? `<label class="ghost file-btn" style="text-align:center">${f.busy === "label" ? "Leggo la foto…" : "Foto dell'etichetta o dell'alimento"}<input type="file" accept="image/*" data-act="flabel" aria-label="Foto dell'etichetta"></label>` : ""}
       <textarea id="ftext" rows="2" placeholder="Oppure scrivilo: 3 fette di pane di grano duro da 25 g, 60 g di tacchino">${esc(f.text || "")}</textarea>
-      ${S.sample ? `<button class="ghost" data-act="estimate" ${f.busy ? "disabled" : ""}>${f.busy === "text" ? "Sto stimando…" : "Stima dal testo"}</button>` : `<p class="small muted">Stima e foto funzionano aprendo la scheda da claude.ai. Intanto puoi scrivere tu i valori.</p>`}
+      ${S.sample ? `<button class="ghost" data-act="estimate" ${f.busy ? "disabled" : ""}>${f.busy === "text" ? "Sto stimando…" : "Stima dal testo"}</button>` : `<p class="small muted">Per stimare dal testo o dalle foto attiva l'AI gratuita nelle impostazioni. Intanto puoi scrivere tu i valori.</p>`}
       ${f.err ? `<div class="alert">${esc(f.err)}</div>` : ""}
       ${items.length ? `<table class="ftab"><tbody>${items.map((x, i) => `<tr><td>${esc(x.nome)}<br><span class="small faint">${x.per100 ? `${fmt(x.per100.kcal)} kcal per 100 g` : esc(x.quantita || "")}</span>
           ${x.per100 ? `<div class="fq"><button data-act="fg" data-i="${i}" data-v="-10" aria-label="Meno 10 g">−</button><span class="num">${fmt(x.g)} g</span><button data-act="fg" data-i="${i}" data-v="10" aria-label="Più 10 g">+</button></div>` : ""}</td>
@@ -1010,19 +1011,20 @@ function renderSheet() {
     const pr = S.profile;
     html = `<div class="block-h"><h2>Impostazioni</h2><button class="link small" data-act="close" style="padding:0">Chiudi</button></div>
       <div class="list"><div class="lrow"><span class="muted">Profilo</span><span class="r">${esc(pr.nome)}, ${pr.eta} anni, ${fmt(pr.peso)} kg</span></div><div class="lrow"><span class="muted">Obiettivo</span><span class="r">${esc((GOALS.find(g => g[0] === pr.obiettivo) || GOALS[1])[1])}</span></div><div class="lrow"><span class="muted">Calorie</span><span class="r">${fmt(PLAN.kcal)} kcal · ${PLAN.pro} g proteine</span></div></div>
+      ${S.site ? aiKeyBox() : ""}
       <button class="menu-btn" data-act="redo" data-v="1">Modifica profilo e colore</button>
       <button class="menu-btn" data-act="redo" data-v="2">Carica una nuova scheda</button>
       <button class="menu-btn" data-act="redo" data-v="3">Carica un nuovo piano alimentare</button>
       ${S.downloads ? `<button class="menu-btn" data-act="export" data-v="sedute">Esporta storico allenamenti (CSV)</button><button class="menu-btn" data-act="export" data-v="diario">Esporta peso e pasti (CSV)</button>` : ""}
       <button class="link small" data-act="wipe" style="color:var(--warn-ink)">${S.confirmWipe ? "Conferma: cancella tutti i miei dati" : "Cancella tutti i miei dati"}</button>
-      <p class="small faint">I dati sono salvati nel tuo account e li vedi solo tu. Le calorie sono stime; il coach non sostituisce medico, dietista o allenatore.</p>`;
+      <p class="small faint">${S.site ? "I dati restano solo su questo telefono: se cancelli i dati del browser li perdi." : "I dati sono salvati nel tuo account e li vedi solo tu."} Le calorie sono stime; il coach non sostituisce medico, dietista o allenatore.</p>`;
   } else if (sh === "saved") {
     html = S.savedHtml + `<button class="primary" data-act="close">Fatto</button>`;
   } else if (sh === "chat") {
     const msgs = S.chat.msgs;
     html = `<div class="block-h"><h2>Coach</h2><button class="link small" data-act="close" style="padding:0">Chiudi</button></div>
       <p class="small faint">Legge scheda, dieta e i tuoi dati. Non cambia la dieta né prescrive integratori: per quelli decide il dietista.</p>
-      ${S.sample ? `<div class="chips">${QUICK.map(q => `<button class="ghost" data-act="ask" data-v="${esc(q)}" ${S.coachBusy ? "disabled" : ""}>${esc(q)}</button>`).join("")}</div>` : `<div class="alert">Il coach risponde quando apri la scheda da claude.ai e consenti l'accesso a Claude.</div>`}
+      ${S.sample ? `<div class="chips">${QUICK.map(q => `<button class="ghost" data-act="ask" data-v="${esc(q)}" ${S.coachBusy ? "disabled" : ""}>${esc(q)}</button>`).join("")}</div>` : aiKeyBox()}
       <div class="thread" id="thread">${msgs.map(m => `<div class="msg ${m.role}">${m.role === "user" ? esc(m.content) : fmtChat(m.content)}</div>`).join("")}${S.coachBusy ? `<div class="msg assistant" id="live">${S.coachLive ? fmtChat(S.coachLive) : '<p class="faint">Sto leggendo i tuoi dati…</p>'}</div>` : ""}</div>
       ${msgs.length && !S.coachBusy ? `<button class="link small" data-act="chatclear">Nuova conversazione</button>` : ""}
       ${S.sample ? `<form class="ask" data-act="askform"><textarea id="q" rows="1" placeholder="Scrivi una domanda" aria-label="Domanda per il coach"></textarea><button class="primary" type="submit" ${S.coachBusy ? "disabled" : ""}>Invia</button></form>` : ""}`;
@@ -1230,7 +1232,7 @@ applyAll();
 if (S.profile) showHello(S.profile.nome);
 render();
 (async function connect() {
-  if (!window.claude || !window.claude.use) return;
+  if (!window.claude || !window.claude.use) { await setupSite(); render(); return; }
   const use = n => window.claude.use(n).catch(() => null);
   const [db, user, assets, sample, downloads] = await Promise.all([use("db"), use("user"), use("assets"), use("sample"), use("downloads")]);
   S.assets = assets; S.sample = sample; S.downloads = downloads;
