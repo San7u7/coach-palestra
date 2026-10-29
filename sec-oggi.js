@@ -67,7 +67,8 @@
 
   /* ---------- riquadri «I numeri di oggi» ---------- */
   const FV = /(frutt[aoi](?!\s+secc)|verdur|vegetal|insalat|ortagg|spremut|\bmel[ae]\b|banan|aranc|\bper[ae]\b|kiwi|pomodor|zucchin|spinac|broccol|carot|finocch|cavol|fagiolin|bietol|peperon|melanzan|frutti di bosco)/i;
-  function fruitVeg() { // porzioni dai pasti del piano segnati come fatti oggi
+  function fruitVeg() { // porzioni di oggi: stesso calcolo dello storico e dei report (V3Stats), così i numeri coincidono ovunque
+    if (window.V3Stats) { V3Stats.clear(); const d = V3Stats.day(localISO()); return d.fv == null ? 0 : d.fv; }
     if (!hasMealPlan()) return null;
     const dw = new Date().getDay(); let n = 0;
     for (const [k] of MEALS) if (mstate(k) === "plan") { const m = mealOf(dw, k); if (m) n += (m.i || []).filter(t => FV.test(t)).length; }
@@ -91,18 +92,20 @@
       if (!w.planned) return ({ label: weekLab(), value: "–", miss: "Crea la scheda", act: "go", arg: "palestra" });
       return ({ label: weekLab(), value: w.done, of: w.planned, pct: ui.pct(w.done, w.planned), act: "riepilogo" });
     }
-    if (k === "pro") return ({ label: "Proteine", value: d.pro, of: d.proT, unit: "g", pct: ui.pct(d.pro, d.proT), act: "go", arg: "cibo" });
-    if (k === "kcal") return ({ label: "Calorie", value: d.kcal, of: d.kcalT, pct: ui.pct(d.kcal, d.kcalT), act: "go", arg: "cibo" });
-    if (k === "carb") return ({ label: "Carboidrati", value: d.cho, of: d.choT || null, unit: "g", pct: d.choT ? ui.pct(d.cho, d.choT) : null, act: "go", arg: "cibo" });
-    if (k === "fat") return ({ label: "Grassi", value: d.fat, of: d.fatT || null, unit: "g", pct: d.fatT ? ui.pct(d.fat, d.fatT) : null, act: "go", arg: "cibo" });
-    if (k === "water") { const w = water(); return ({ label: "Acqua", value: ui.nf(w.l, 2), of: ui.nf(w.t, 2), unit: "L", pct: ui.pct(w.l, w.t), act: "acqua" }); }
+    if (k === "pro") return ({ label: "Proteine", value: d.pro, of: d.proT, unit: "g", pct: ui.pct(d.pro, d.proT), act: "numeri" });
+    if (k === "kcal") return ({ label: "Calorie", value: d.kcal, of: d.kcalT, pct: ui.pct(d.kcal, d.kcalT), act: "numeri" });
+    if (k === "carb") return ({ label: "Carboidrati", value: d.cho, of: d.choT || null, unit: "g", pct: d.choT ? ui.pct(d.cho, d.choT) : null, act: "numeri" });
+    if (k === "fat") return ({ label: "Grassi", value: d.fat, of: d.fatT || null, unit: "g", pct: d.fatT ? ui.pct(d.fat, d.fatT) : null, act: "numeri" });
+    if (k === "water") { const w = water(); return ({ label: "Acqua", value: ui.nf(w.l, 2), of: ui.nf(w.t, 2), unit: "L", pct: ui.pct(w.l, w.t), act: "numeri" }); }
     if (k === "mov") { const m = moveMin(); return ({ label: "Movimento", value: m, of: 60, unit: "min", pct: ui.pct(m, 60), act: "go", arg: "palestra" }); }
-    if (k === "fv") { const n = fruitVeg(); return n == null ? ({ label: "Frutta e verdura", value: "–", miss: "Serve il piano dei pasti", act: "go", arg: "cibo" })
-      : ({ label: "Frutta e verdura", value: n, of: 5, unit: "porzioni", pct: ui.pct(n, 5), act: "go", arg: "cibo" }); }
-    if (k === "peso") { const w = data.weight().last; return ({ label: "Peso", value: w ? ui.nf(w.kg) : "–", unit: w ? "kg" : null, miss: w ? null : "Nessuna pesata", act: "go", arg: "progressi" }); }
+    if (k === "fv") { const n = fruitVeg(); return n == null ? ({ label: "Frutta e verdura", value: "–", miss: "Serve il piano dei pasti", act: "numeri" })
+      : ({ label: "Frutta e verdura", value: n, of: 5, unit: "porzioni", pct: ui.pct(n, 5), act: "numeri" }); }
+    if (k === "peso") { const w = data.weight().last; return ({ label: "Peso", value: w ? ui.nf(w.kg) : "–", unit: w ? "kg" : null, miss: w ? null : "Nessuna pesata", act: "peso" }); }
     return null;
   }
   const water = () => { const v = dayRaw(); return { l: (v && v.water || 0) * 0.25, t: planTargets().waterL || 2 }; };
+  /* 29/10: stessi conti per Cibo › «I numeri di oggi» (sec-cibo.js), così i numeri sono identici a questi riquadri */
+  window.V3Num = { fruitVeg, water };
 
   /* ---------- «Lo sapevi?» legato alla giornata e all'età ---------- */
   const FACTS = {
@@ -141,50 +144,15 @@
       ui.end("Segnare i pasti ti fa vedere cosa mangi davvero", { act: "sap", arg: "pro", leoQ: "Perché segnare i pasti?" });
   }
 
-  /* ---------- riepilogo settimana (28/10, tela tavola 13): kg mossi per giorno incrociati con le proteine ---------- */
-  let wOff = 0;
-  function weekData(off) {
-    const from = addDays(localISO(mondayOf(new Date())), -7 * off), days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
-    const ss = S.sessions.filter(x => { const d = localISO(new Date(x.date)); return d >= from && d <= days[6]; });
-    const kgOf = x => (x.items || []).reduce((m, it) => m + (it.sets || []).reduce((a, z) => a + (+z.kg || 0) * (+z.reps || 0), 0), 0);
-    const per = days.map(iso => { const di = data.day(iso), l = ss.filter(x => localISO(new Date(x.date)) === iso);
-      return { iso, n: l.length, kg: l.reduce((m, x) => m + kgOf(x), 0), proOk: !!(di.logged && di.proT && di.pro >= di.proT * .9) }; });
-    const fat = ss.filter(x => x.fatica != null).map(x => +x.fatica), gym = per.filter(d => d.n);
-    return { per, done: ss.length, planned: DAYS.length, kg: Math.round(per.reduce((m, d) => m + d.kg, 0)), fat: fat.length ? Math.round(fat.reduce((a, b) => a + b, 0) / fat.length) : null, gym: gym.length, proGym: gym.filter(d => d.proOk).length };
-  }
-  function weekPage() {
-    const w = weekData(wOff), kid = data.profile().group === "bambino", kw = kidWords(), full = w.planned && w.done >= w.planned;
-    const nx = P[nextDay()], nxName = nx ? sessName(nx.nome || "Seduta " + nextDay()) : "";
-    const verdict = full ? (wOff === 0 && !kid && w.kg > weekData(1).kg ? "Settimana piena, carichi in aumento" : "Settimana piena")
-      : wOff === 0 ? (w.done ? `${kw ? "Fatti" : "Fatte"} ${w.done} di ${w.planned}: resta ${nxName}` : "Settimana da iniziare") : `${w.done} di ${w.planned} ${kw ? "allenamenti fatti" : "sedute fatte"}`;
-    const max = Math.max(1, ...w.per.map(d => kid ? d.n : d.kg));
-    const bars = w.per.map((d, i) => { const v = kid ? d.n : d.kg; return `<span class="v3-wk-b${v ? (d.proOk ? " ok" : " lo") : ""}" style="height:${v ? Math.max(8, v / max * 100) : 3}%" title="${"LMMGVSD"[i]}"></span>`; }).join("");
-    const aria = w.per.filter(d => d.n).map(d => `${["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"][new Date(d.iso + "T12:00:00").getDay()]} ${kid ? d.n + " allenamento" : ui.nf(Math.round(d.kg)) + " kg"}${d.proOk ? ", proteine raggiunte" : ", proteine sotto"}`).join("; ") || (kw ? "Nessun allenamento" : "Nessuna seduta");
-    const ups = DAYS.reduce((m, k) => m + (P[k] ? P[k].items.filter(it => plan(it).up).length : 0), 0);
-    return ui.back() + `<div class="v3-oggi-ttl"><h1 class="v3-t1">La tua settimana</h1><p class="v3-sub v3-wk-v">${ui.esc(verdict)}</p></div>` +
-      ui.seg(["Questa settimana", "Settimana scorsa"], wOff, "wsel", "Settimana") +
-      ui.card(`<div class="v3-wk-h"><span>${kid ? "Allenamenti" : "Peso sollevato"}</span><b>${w.done} di ${w.planned} ${kw ? "allenamenti" : "sedute"}</b></div>` +
-        `<p class="v3-bn">${kid ? w.done : ui.nf(w.kg) + ' <span class="v3-of">kg</span>'}</p>` +
-        `<div class="v3-wk-c" role="img" aria-label="${ui.esc(aria)}">${bars}</div><div class="v3-wk-d" aria-hidden="true"><span>L</span><span>M</span><span>M</span><span>G</span><span>V</span><span>S</span><span>D</span></div>` +
-        `<p class="v3-bd">Barra piena: proteine raggiunte quel giorno</p>`) +
-      `<div class="v3-oggi-tl">${ui.row({ title: "Proteine raggiunte", sub: w.gym ? `${w.proGym} ${kw ? (w.proGym === 1 ? "allenamento" : "allenamenti") : (w.proGym === 1 ? "seduta" : "sedute")} su ${w.gym}` : (kw ? "Nessun allenamento ancora" : "Nessuna seduta ancora"), act: "go", arg: "cibo" })}` +
-      ui.row(kid ? { title: "Prossimo allenamento", sub: nxName, act: "go", arg: "palestra" } : { title: w.fat != null ? `Fatica media: ${fatWord(w.fat).toLowerCase()}` : "Fatica non segnata", sub: ups ? `${ups} ${ups === 1 ? "carico nuovo" : "carichi nuovi"} questa settimana` : "Carichi stabili", act: "go", arg: "palestra" }) + `</div>` +
-      ui.end("Il muscolo cresce a riposo, se mangi proteine.", { act: "sap", arg: "pro", leoQ: "Perché le proteine contano nei giorni di palestra?" });
-  }
-  if (!document.getElementById("v3-sec-oggi-wk")) { const st = document.createElement("style"); st.id = "v3-sec-oggi-wk"; st.textContent = `
-    #view.v3 .v3-wk-v { color: var(--v3-lime); font-weight: 600; }
-    #view.v3 .v3-wk-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; } #view.v3 .v3-wk-h span { font-size: 15px; font-weight: 600; color: var(--v3-t2); } #view.v3 .v3-wk-h b { font-size: 15px; color: var(--v3-lime); }
-    #view.v3 .v3-wk-c { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 120px; border-bottom: 1px solid var(--v3-s3); }
-    #view.v3 .v3-wk-b { display: block; background: var(--v3-s3); border-radius: 6px 6px 0 0; } #view.v3 .v3-wk-b.ok { background: #fff; } #view.v3 .v3-wk-b.lo { background: rgba(255,255,255,.4); }
-    #view.v3 .v3-wk-d { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; text-align: center; font-size: 13px; color: var(--v3-t3); }`; document.head.appendChild(st); }
+  /* 29/10: «La tua settimana» tolta (coerenza): la settimana ha una casa sola, Palestra › La mia settimana */
 
   /* ---------- azioni ---------- */
-  function openMeal(k) { V3.go("cibo", { meal: k }); } // apre Cibo direttamente sulla pagina del pasto k
+  function openMeal(k) { V3.open("cibo", { meal: k }); } // apre il pasto k in Cibo; Indietro torna a Oggi
   function waterSheet() {
-    const w = water(), body = () => ui.big(`${ui.nf(w.l, 2)} <span class="v3-of">/${ui.nf(w.t, 2)} L</span>`, "Un bicchiere = 250 ml");
+    const w = water(), body = () => ui.big(`${ui.nf(w.l, 2)} <span class="v3-of">/${ui.nf(w.t, 2)} L</span>`, "Si segna a passi di 0,25 L");
     const s = V3.sheet(`<h2 class="v3-sh1">Acqua di oggi</h2><div class="v3-oggi-w"><div data-oggi-w>${body()}</div>
-      <div class="v3-pm2"><button data-act="water" data-v="-1" data-v3act="wupd">Togli bicchiere</button><button data-act="water" data-v="1" data-v3act="wupd">Aggiungi bicchiere</button></div></div>${ui.secondary("Chiudi", "close")}`,
-    { label: "Acqua di oggi", on: { wupd(a, btn) { const x = water(); toast(btn && btn.dataset.v === "-1" ? "Bicchiere tolto" : "Bicchiere aggiunto", { sub: `${ui.nf(x.l, 2)} di ${ui.nf(x.t, 2)} L oggi` }); w.l = x.l; const b = s.el.querySelector("[data-oggi-w]"); if (b) b.innerHTML = body(); } } });
+      <div class="v3-pm2"><button data-act="water" data-v="-1" data-v3act="wupd">Togli 0,25 L</button><button data-act="water" data-v="1" data-v3act="wupd">Aggiungi 0,25 L</button></div></div>${ui.secondary("Chiudi", "close")}`,
+    { label: "Acqua di oggi", on: { wupd(a, btn) { const x = water(); toast(btn && btn.dataset.v === "-1" ? "Tolti 0,25 L" : "Aggiunti 0,25 L", { sub: `${ui.nf(x.l, 2)} di ${ui.nf(x.t, 2)} L oggi` }); w.l = x.l; const b = s.el.querySelector("[data-oggi-w]"); if (b) b.innerHTML = body(); } } });
   }
 
   /* «Personalizza sezione»: scegli 4 riquadri. Salva nella chiave esistente «tiles» di board.js (stesso formato: 4 chiavi) */
@@ -206,16 +174,17 @@
   V3.register("oggi", {
     enter(o) { if (o && o.day && window.V3Giorni) { V3Giorni.reset(o.day); sub = "giornata"; V3.page(() => { sub = null; }); } }, // da Palestra › La mia settimana
     render(el) {
-      el.innerHTML = sub === "giornata" ? dayPage() : sub === "settimana" ? weekPage() : mainPage();
+      el.innerHTML = sub === "giornata" ? dayPage() : mainPage();
     },
     on: {
       pasto(k) { openMeal(k); },
-      seduta() { V3.go("palestra"); },
+      seduta() { V3.open("palestra"); },
       giornata() { if (window.V3Giorni) V3Giorni.reset(); sub = "giornata"; V3.page(() => { sub = null; }); },
       ...(window.V3Giorni ? V3Giorni.on : {}),
-      riepilogo() { const prev = sub; sub = "settimana"; wOff = 0; V3.page(() => { sub = prev; }); },
-      wsel(i) { wOff = +i; V3.refresh(); },
+      riepilogo() { V3.open("palestra", { settimana: true }); },
       acqua() { waterSheet(); },
+      numeri() { V3.open("cibo", { numeri: true }); }, // 29/10: riquadri → Cibo › «I numeri di oggi»
+      peso() { V3.open("progressi", { storico: { view: "settimana", param: "peso" } }); },
       riquadri() { tilesSheet(); },
       sap(k) {
         const f = FACTS[k] || FACTS.pro;
